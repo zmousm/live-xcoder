@@ -6,7 +6,7 @@ echo $0 -i input-stream -o rtmp-output-url-prefix -v src-video-stream-id \
     -f ffmpeg-encode-renditions-params-file [-c crop-dimensions-offset \
     -k keyframe-interval-hard \
     -j snapshot-prefix \
-    -b abg-monitor-Input/Output/Raw[:abg-silence-threshold:abg-report-volume:abg-address:abg-port] \
+    -b abg-monitor-Input/Output/Raw[:abg-port:abg-silence-threshold:abg-report-volume:abg-address] \
     -p pidfile -l facility.level -d{aemonize}] >&2
 }
 
@@ -167,25 +167,25 @@ if [ ${#ffabg[@]} -ge 1 ]; then
     fi
     ffabg_what+=(-map "${ffmap_audio}" pipe:4)
 fi
-if [ ${#ffabg[@]} -ge 2 ]; then
-    ffabg_threshold="${ffabg[1]}"
+if [ ${#ffabg[@]} -eq 2 ]; then
+    ffabg_port="${ffabg[1]}"
+else
+    ffabg_port=6514
+fi
+if [ ${#ffabg[@]} -ge 3 ]; then
+    ffabg_threshold="${ffabg[2]}"
 else
     ffabg_threshold=0.01
 fi
-if [ ${#ffabg[@]} -ge 3 ]; then
-    ffabg_vol="${ffabg[2]}"
+if [ ${#ffabg[@]} -ge 4 ]; then
+    ffabg_vol="${ffabg[3]}"
 else
     ffabg_vol=0
 fi
-if [ ${#ffabg[@]} -ge 4 ]; then
-    ffabg_addr="${ffabg[3]}"
+if [ ${#ffabg[@]} -ge 5 ]; then
+    ffabg_addr="${ffabg[4]}"
 else
     ffabg_addr=localhost
-fi
-if [ ${#ffabg[@]} -eq 5 ]; then
-    ffabg_port="${ffabg[4]}"
-else
-    ffabg_port=6514
 fi
 if [ ${#ffabg[@]} -gt 5 ]; then
     do_usage
