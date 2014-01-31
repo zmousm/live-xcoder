@@ -28,9 +28,6 @@ while true; do
 	c)
 	    opts[crop]="$OPTARG"
 	    ;;
-	# s)
-	#     opts[scale]="$OPTARG"
-	#     ;;
 	k)
 	    opts[keyint]="$OPTARG"
 	    ;;
@@ -71,8 +68,7 @@ ffsyslog="${opts[syslog]}"
 ffpidfile="${opts[pidfile]:=/tmp/ffmpeg.${ffoutputprefix##*/}.pid}"
 vlcpidpath="${ffpidfile%/*}"
 vlcpidfile="${ffpidfile##*/}"
-vlcpidfile="${vlcpidfile#ffmpeg.}"
-vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile}"
+vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile#ffmpeg.}"
 
 OLDIFS="$IFS"
 IFS=:
@@ -117,9 +113,17 @@ fi
 FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}")
 for rendition in "${RENDITIONS[@]}"; do
     fffilter_video_deint="${FFDEINTERLACE[rendition]}${FFDEINTERLACE[rendition]:+,}"
-    fffilter_video="crop=${opts[crop]:=704:576:8:0},"
-    fffilter_video+="scale=${FFSCALE[rendition]},setsar=1/1"
+    fffilter_video="${opts[crop]:+crop=}${opts[crop]}${opts[crop]:+,}"
+    if [ -n "${FFSCALE[rendition]}" ]; then
+	fffilter_video+="scale=${FFSCALE[rendition]},"
+    else
+	echo "$0: FFSCALE must be specified for each rendition" >&2
+	exit 1
+    fi
+    # hardcoded SAR 1:1
+    fffilter_video+="setsar=1/1"
 
+    # hack: get array by indirection
     FFVENC="FFVENC_${rendition}"[@]
     FFVENC=("${!FFVENC}")
 
@@ -149,6 +153,7 @@ if [ ${#ffabg[@]} -ge 1 ]; then
     elif [ "${ffabg[0]}" = o ]; then
 	if [ ${#FFAENC_COMMON[@]} -eq 0 ]; then
 	    echo "$0: -b o requires FAENC_COMMON" >&2
+	    exit 1
 	fi
 	ffabg_what=(-f mpegts)
 	ffabg_what+=("${FFAENC_COMMON[@]}")

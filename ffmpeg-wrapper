@@ -5,8 +5,8 @@ echo $0 -i input-stream -o rtmp-output-url -v src-video-stream-id \
     -a src-audio-stream-id[:audio-channel] [-c crop-dimensions-offset -s scale-dimensions \
     -k keyframe-interval-hard -f ffmpeg-params-file \
     -j snapshot-file \
-    -b abg-monitor-Input-or-Output[:abg-silence-threshold:abg-report-volume:abg-address:abg-port] \
-    -p pidfile -l facility.level -d{aemonize}] >/dev/stderr
+    -b abg-monitor-Input/Output/Raw[:abg-silence-threshold:abg-report-volume:abg-address:abg-port] \
+    -p pidfile -l facility.level -d{aemonize}] >&2
 }
 
 daemonize=false
@@ -70,8 +70,7 @@ ffsyslog="${opts[syslog]}"
 ffpidfile="${opts[pidfile]:=/tmp/ffmpeg.${ffoutput##*/}.pid}"
 vlcpidpath="${ffpidfile%/*}"
 vlcpidfile="${ffpidfile##*/}"
-vlcpidfile="${vlcpidfile#ffmpeg.}"
-vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile}"
+vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile#ffmpeg.}"
 
 OLDIFS="$IFS"
 IFS=:
@@ -100,7 +99,11 @@ else
     exit 1
 fi
 
-fffilter_video="crop=${opts[crop]:=704:576:8:0},scale=${opts[scale]:=640:360},setsar=1/1"
+#fffilter_video="crop=${opts[crop]:=704:576:8:0},scale=${opts[scale]:=640:360},setsar=1/1"
+fffilter_video="${opts[crop]:+crop=}${opts[crop]}${opts[crop]:+,}"
+fffilter_video+="${opts[scale]:+scale=}${opts[scale]}${opts[scale]:+,}"
+# hardcoded SAR 1:1
+fffilter_video+="setsar=1/1"
 ffkeyframes="expr:gte(t,n_forced*${opts[keyint]:=4})"
 
 FFVENC=(-c:v libx264 -profile:v baseline -preset:v faster -b:v 512k)
