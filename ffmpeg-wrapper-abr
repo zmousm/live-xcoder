@@ -1,0 +1,258 @@
+#!/bin/bash -x
+
+do_usage () {
+echo $0 -i input-stream -o rtmp-output-url-prefix -v src-video-stream-id \
+    -a src-audio-stream-id[:audio-channel] \
+    -f ffmpeg-encode-renditions-params-file [-c crop-dimensions-offset \
+    -k keyframe-interval-hard \
+    -j snapshot-prefix \
+    -b abg-monitor-Input/Output/Raw[:abg-silence-threshold:abg-report-volume:abg-address:abg-port] \
+    -p pidfile -l facility.level -d{aemonize}] >&2
+}
+
+daemonize=false
+declare -A opts;
+while true; do
+    getopts i:o:c:k:f:a:v:l:j:b:p:dh opt || break
+    case $opt in
+	h)
+	    do_usage
+	    exit 0
+	    ;;
+	i)
+	    opts[input]="$OPTARG"
+	    ;;
+	o)
+	    opts[outputprefix]="$OPTARG"
+	    ;;
+	c)
+	    opts[crop]="$OPTARG"
+	    ;;
+	# s)
+	#     opts[scale]="$OPTARG"
+	#     ;;
+	k)
+	    opts[keyint]="$OPTARG"
+	    ;;
+	f)
+	    opts[ffparams]="$OPTARG"
+	    ;;
+	a)
+	    opts[audiosrc]="$OPTARG"
+	    ;;
+	v)
+	    opts[videosrc]="$OPTARG"
+	    ;;
+	j)
+	    opts[snapfileprefix]="$OPTARG"
+	    ;;
+	b)
+	    opts[audiobargraph]="$OPTARG"
+	    ;;
+	p)
+	    opts[pidfile]="$OPTARG"
+	    ;;
+	l)
+	    opts[syslog]="$OPTARG"
+	    ;;
+	d)
+	    daemonize=true
+	    ;;
+    esac
+done
+
+ffinput="${opts[input]}"
+test -n "${ffinput}" || { do_usage; exit 1; }
+ffoutputprefix="${opts[outputprefix]}"
+test -n "${ffoutputprefix}" || { do_usage; exit 1; }
+#ffsnapfile="${opts[snapfile]:=/tmp/${ffoutput##*/}.jpg}"
+ffsnapfileprefix="${opts[snapfileprefix]}"
+ffsyslog="${opts[syslog]}"
+ffpidfile="${opts[pidfile]:=/tmp/ffmpeg.${ffoutputprefix##*/}.pid}"
+vlcpidpath="${ffpidfile%/*}"
+vlcpidfile="${ffpidfile##*/}"
+vlcpidfile="${vlcpidfile#ffmpeg.}"
+vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile}"
+
+OLDIFS="$IFS"
+IFS=:
+ffvideosrc=(${opts[videosrc]})
+IFS="$OLDIFS"
+unset OLDIFS
+if [ ${#ffvideosrc[@]} -eq 1 ]; then
+    ffmap_video="0:${ffvideosrc[0]}"
+else
+    do_usage
+    exit 1
+fi
+
+OLDIFS="$IFS"
+IFS=:
+ffaudiosrc=(${opts[audiosrc]})
+IFS="$OLDIFS"
+unset OLDIFS
+if [ ${#ffaudiosrc[@]} -eq 2 ]; then
+    fffilter_audio="[0:${ffaudiosrc[0]}]pan=stereo:c0=c${ffaudiosrc[1]}:c1=c${ffaudiosrc[1]}[pa]"
+    ffmap_audio="[pa]"
+elif [ ${#ffaudiosrc[@]} -eq 1 ]; then
+    ffmap_audio="0:${ffaudiosrc[0]}"
+else
+    do_usage
+    exit 1
+fi
+
+ffkeyframes="expr:gte(t,n_forced*${opts[keyint]:=4})"
+
+if [ -n "${opts[ffparams]}" -a -f "${opts[ffparams]}" -a -r "${opts[ffparams]}" ]; then
+    . "${opts[ffparams]}"
+else
+    do_usage
+    exit 1
+fi
+
+if [ "${#RENDITIONS[@]}" -eq 0 ]; then
+    echo "RENDITIONS not specified in ffmpeg-encode-renditions-params-file"
+    exit 1
+fi
+FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}")
+for rendition in "${RENDITIONS[@]}"; do
+    fffilter_video_deint="${FFDEINTERLACE[rendition]}${FFDEINTERLACE[rendition]:+,}"
+    fffilter_video="crop=${opts[crop]:=704:576:8:0},"
+    fffilter_video+="scale=${FFSCALE[rendition]},setsar=1/1"
+
+    FFVENC="FFVENC_${rendition}"[@]
+    FFVENC=("${!FFVENC}")
+
+    if [ ${#FFAENC_COMMON[@]} -ne 0 ]; then
+	FFAENC=("${FFAENC_COMMON[@]}")
+    else
+	FFAENC="FFAENC_${rendition}"[@]
+	FFAENC=("${!FFAENC}")
+    fi
+
+    FFOPTS+=(-filter:"${ffmap_video}" "${fffilter_video_deint}${fffilter_video}" "${FFVENC[@]}" -force_key_frames "${ffkeyframes}" ${fffilter_audio:+-filter_complex} "${fffilter_audio}" "${FFAENC[@]}" -map "${ffmap_video}" -map "${ffmap_audio}" -f flv "${ffoutputprefix}${rendition}")
+
+    if [ -n "${ffsnapfileprefix}" ]; then
+	FFOPTS+=(-f image2 -updatefirst 1 -filter:"${ffmap_video}" "fps=fps=1/5,${fffilter_video}" -map "${ffmap_video}" "${ffsnapfileprefix}${rendition}.jpg")
+    fi
+done
+
+
+OLDIFS="$IFS"
+IFS=:
+ffabg=(${opts[audiobargraph]})
+IFS="$OLDIFS"
+unset OLDIFS
+if [ ${#ffabg[@]} -ge 1 ]; then
+    if [ "${ffabg[0]}" = i ]; then
+	ffabg_what=(-f mpegts -c:a copy)
+    elif [ "${ffabg[0]}" = o ]; then
+	if [ ${#FFAENC_COMMON[@]} -eq 0 ]; then
+	    echo "$0: -b o requires FAENC_COMMON" >&2
+	fi
+	ffabg_what=(-f mpegts)
+	ffabg_what+=("${FFAENC_COMMON[@]}")
+    elif [ "${ffabg[0]}" = r ]; then
+	ffabg_what=(-f nut -c:a pcm_s16le)
+	# force vlc input format
+	VLCOPTS+=(--ffmpeg-format=nut)
+    else
+	do_usage
+	exit 1
+    fi
+    ffabg_what+=(-map "${ffmap_audio}" pipe:4)
+fi
+if [ ${#ffabg[@]} -ge 2 ]; then
+    ffabg_threshold="${ffabg[1]}"
+else
+    ffabg_threshold=0.01
+fi
+if [ ${#ffabg[@]} -ge 3 ]; then
+    ffabg_vol="${ffabg[2]}"
+else
+    ffabg_vol=0
+fi
+if [ ${#ffabg[@]} -ge 4 ]; then
+    ffabg_addr="${ffabg[3]}"
+else
+    ffabg_addr=localhost
+fi
+if [ ${#ffabg[@]} -eq 5 ]; then
+    ffabg_port="${ffabg[4]}"
+else
+    ffabg_port=6514
+fi
+if [ ${#ffabg[@]} -gt 5 ]; then
+    do_usage
+    exit 1
+fi
+
+vlc_audiobargraph () {
+    vlc_abgfifo="$1"
+    vlc -I dummy --daemon --pidfile="${vlcpidfile}" \
+	--play-and-exit \
+	--no-video --aout dummy \
+	--audio-filter="audiobargraph_a" \
+	--audiobargraph_a-address="${ffabg_addr}" \
+	--audiobargraph_a-port="${ffabg_port}" \
+	--audiobargraph_a-connection_reset=1 \
+	--audiobargraph_a-bargraph="${ffabg_vol}" \
+	--audiobargraph_a-bargraph_repetition=22 \
+	--audiobargraph_a-silence=1 \
+	--audiobargraph_a-repetition_time=1000 \
+	--audiobargraph_a-time_window=10000 \
+	--audiobargraph_a-alarm_threshold="${ffabg_threshold}" \
+	"${VLCOPTS[@]}" \
+	"${vlc_abgfifo}"
+}
+
+if [ ${#ffabg[@]} -ne 0 ]; then
+    FFOPTS+=("${ffabg_what[@]}")
+    if [ "${daemonize}" = true -o -n "${ffsyslog}" ]; then
+	vlcsyslogfacility="${ffsyslog%.*}"
+	VLCOPTS+=(--syslog --syslog-facility="${vlcsyslogfacility:-daemon}")
+    fi
+    ffabgfifo=$(mktemp -u)
+    mkfifo "$ffabgfifo"
+    if [ $? -ne 0 ]; then
+	exit 1
+    fi
+    vlc_audiobargraph "${ffabgfifo}"
+    exec 4>"${ffabgfifo}"
+fi
+
+# no daemonize, no syslog
+if [ "${daemonize}" != true -a -z "${ffsyslog}" ]; then
+    echo /usr/bin/ffmpeg ${FFOPTS[@]:2}
+    /usr/bin/ffmpeg ${FFOPTS[@]:2}
+    RC=$?
+    [ ${#ffabg[@]} -ne 0 ] && rm -f "${ffabgfifo}"
+    exit $RC
+fi
+
+coproc /usr/bin/nohup /usr/bin/ffmpeg ${FFOPTS[@]} 2>&1
+
+if [ $? -ne 0 ]; then
+    exit 1
+fi
+FFPID=$COPROC_PID
+touch "${ffpidfile}" && echo $FFPID > "${ffpidfile}"
+if [ $? -ne 0 ]; then
+    kill -TERM ${FFPID}
+fi
+
+# daemonize, (implicit) syslog
+if [ "$daemonize" = true ]; then
+    exec 3<&${COPROC[0]}
+    {
+	/usr/bin/logger -p "${ffsyslog:-daemon.notice}" -t "$(ps -p ${FFPID} -o comm=)[${FFPID}]"
+	[ ${#ffabg[@]} -ne 0 ] && rm -f "${ffabgfifo}"
+	rm -f "${ffpidfile}"
+    } <&3 &
+# no daemonize, explicit syslog
+elif [ -n "${ffsyslog}" ]; then
+    trap 'rm -f "${ffpidfile}"' HUP INT QUIT TERM KILL
+    [ ${#ffabg[@]} -ne 0 ] && trap 'rm -f "${ffabgfifo}"' HUP INT QUIT TERM KILL
+    /usr/bin/logger -p "${ffsyslog}" -t "$(ps -p ${FFPID} -o comm=)[${FFPID}]" <&${COPROC[0]}
+    kill $$
+fi
