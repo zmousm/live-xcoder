@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 do_usage () {
 echo $0 -i input-stream -o rtmp-output-url-prefix -v src-video-stream-id \
