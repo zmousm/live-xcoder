@@ -3,7 +3,7 @@
 do_usage () {
 echo $0 -i input-stream -o rtmp-output-url-prefix -v src-video-stream-id \
     -a src-audio-stream-id[:audio-channel] \
-    -f ffmpeg-encode-renditions-params-file [-c crop-dimensions-offset \
+    -f ffmpeg-encoding-options-renditions-file [-c crop-dimensions-offset \
     -k keyframe-interval-hard \
     -j snapshot-prefix \
     -b abg-monitor-Input/Output/Raw[:abg-port:abg-silence-threshold:abg-report-volume:abg-address] \
@@ -107,7 +107,7 @@ else
 fi
 
 if [ "${#RENDITIONS[@]}" -eq 0 ]; then
-    echo "RENDITIONS not specified in ffmpeg-encode-renditions-params-file"
+    echo "RENDITIONS not specified in ffmpeg-encode-renditions-params-file" >&2
     exit 1
 fi
 FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}")

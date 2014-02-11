@@ -3,7 +3,7 @@
 do_usage () {
 echo $0 -i input-stream -o rtmp-output-url -v src-video-stream-id \
     -a src-audio-stream-id[:audio-channel] [-c crop-dimensions-offset -s scale-dimensions \
-    -k keyframe-interval-hard -f ffmpeg-params-file \
+    -k keyframe-interval-hard -f ffmpeg-encoding-options-file \
     -j snapshot-file \
     -b abg-monitor-Input/Output/Raw[:abg-port:abg-silence-threshold:abg-report-volume:abg-address] \
     -p pidfile -l facility.level -d{aemonize}] >&2
