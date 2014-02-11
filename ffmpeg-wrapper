@@ -15,11 +15,11 @@ Required parameters:
   -v, --videosrc=src=stream-id	Source video stream selector
   -a, --audiosrc=src-stream-id[:audio-channel]
 				Source audio stream and channel selector
-				The selected channel, if specified, is duplicated to stereo output
+				If specified, the selected channel is duplicated to stereo output
 				using a pan audio filter.
 Optional parameters:
   -c, --crop=pix-x:pix-y:offset-x,offset-y
-				Image crop filter dimensions and offset
+				Image crop filter dimensions and offsets
   -s, --scale=x:y		Image scale dimensions (output SAR hardcoded to 1/1)
   -k, --keyint=seconds		Imposed (hard) keyframe interval (Default: 4)
   -f, --ffopts-file=file	Read FFmpeg encoding parameters from this file
@@ -29,12 +29,13 @@ Optional parameters:
   -b, --audiobargraph=i[nput]/o[utput]/r[aw][:tcp-port:silence-threshold:report-volume:ip-address]
 				Pipe to VLC with Audio Bar Graph filter for audio monitoring
 				i/o/r: output audio: same as input (copy), same as output or raw
-				tcp-port: direct ABGA output to this port (default: 6514)
+				tcp-port: direct ABG output to this port (default: 6514)
 				silence-threshold: float (default: 0.01)
 				report-volume: integer (default: 0)
-				ip-address: Direct ABGA output to this (IPv4) address (default: 127.0.0.1)
+				ip-address: Direct ABG output to this (IPv4) address (default:
+				127.0.0.1)
   -p, --pidfile			Write FFmpeg PID to this file
-  -l, --syslog=[facility.level] Redirect FFmpeg standard error to syslog, optionally using specified
+  -l, --syslog[=facility.level] Redirect FFmpeg standard error to syslog, optionally using specified
 				facility and level (default: daemon.notice)
   -d, --daemon			Run FFmpeg as a daemon
 
@@ -44,13 +45,14 @@ EOF
 daemonize=false
 declare -A opts;
 
-test_getopt="$(GETOPT_COMPATIBLE=1 getopt -T)"
+test_getopt="$(getopt -T)"
 if [ $? -eq 4 -a -z "$test_getopt" ]; then
     getopt_flavor=1
 else
     SCRIPTDIR="$(dirname $(readlink -f "$0"))"
-    if [ -f "${SCRIPTDIR}/getopts_long.sh" -a -r "${SCRIPTDIR}/getopts_long.sh" ]; then
-	. "${SCRIPTDIR}/getopts_long.sh"
+    getopt_src=$(which getopts_long.sh || echo "${SCRIPTDIR}/getopts_long.sh")
+    if [ -f "${getopt_src}" -a -r "${getopt_src}" ]; then
+	. "${getopt_src}"
 	if declare -f getopts_long >/dev/null; then
 	    getopt_flavor=2
 	fi
@@ -192,6 +194,10 @@ elif [ $getopt_flavor -eq 2 ]; then
 		;;
 	    d|daemon)
 		daemonize=true
+		;;
+	    ?)
+		do_usage
+		exit 1
 		;;
 	esac
     done
