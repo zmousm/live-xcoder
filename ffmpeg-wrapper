@@ -21,6 +21,7 @@ Optional parameters:
   -c, --crop=pix-x:pix-y:offset-x,offset-y
 				Image crop filter dimensions and offsets
   -s, --scale=x:y		Image scale dimensions (output SAR hardcoded to 1/1)
+      --deint[=filter]		Deinterlace video, optionally using specified filter
   -k, --keyint=seconds		Imposed (hard) keyframe interval (Default: 4)
   -f, --ffopts-file=file	Read FFmpeg encoding parameters from this file
 				(FFVENC, FFAENC bash arrays)
@@ -66,7 +67,7 @@ fi
 
 if [ $getopt_flavor -eq 1 ]; then
     params="$(getopt -o i:o:c:s:k:f:a:v:l::j:b:p:dh \
-		-l input:,output:,crop:,scale:,keyint: \
+		-l input:,output:,crop:,scale:,deint::,keyint: \
 		-l ffopts-file:,audiosrc:,videosrc: \
 		-l snap-file:,audiobargraph:,pidfile: \
 		-l syslog::,daemon,help -n "$0" -- "$@")"
@@ -94,6 +95,10 @@ if [ $getopt_flavor -eq 1 ]; then
 		;;
 	    -s|--scale)
 		opts[scale]="$2"
+		shift 2
+		;;
+	    --deint)
+		opts[deinterlace]="${2:-yadif=0:-1:0}"
 		shift 2
 		;;
 	    -k|--keyint)
@@ -145,7 +150,7 @@ if [ $getopt_flavor -eq 1 ]; then
 elif [ $getopt_flavor -eq 2 ]; then
     OPTLIND=1
     while getopts_long i:o:c:s:k:f:a:v:l::j:b:p:dh opt \
-	input 1 output 1 crop 1 scale 1 keyint 1 \
+	input 1 output 1 crop 1 scale 1 deint 2 keyint 1 \
 	ffopts-file 1 audiosrc 1 videosrc 1 \
 	snap-file 1 audiobargraph 1 pidfile 1 \
 	syslog 2 daemon 0 help 0 \
@@ -167,6 +172,9 @@ elif [ $getopt_flavor -eq 2 ]; then
 		;;
 	    s|scale)
 		opts[scale]="$OPTLARG"
+		;;
+	    deint)
+		opts[deinterlace]="${OPTLARG:-yadif=0:-1:0}"
 		;;
 	    k|keyint)
 		opts[keyint]="$OPTLARG"
@@ -243,6 +251,7 @@ else
 fi
 
 #fffilter_video="crop=${opts[crop]:=704:576:8:0},scale=${opts[scale]:=640:360},setsar=1/1"
+fffilter_video_deint="${opts[deinterlace]}${opts[deinterlace]:+,}"
 fffilter_video="${opts[crop]:+crop=}${opts[crop]}${opts[crop]:+,}"
 fffilter_video+="${opts[scale]:+scale=}${opts[scale]}${opts[scale]:+,}"
 # hardcoded SAR 1:1
@@ -320,7 +329,7 @@ vlc_audiobargraph () {
 	"${vlc_abgfifo}"
 }
 
-FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}" -filter:"${ffmap_video}" "${fffilter_video}" "${FFVENC[@]}" -force_key_frames "${ffkeyframes}" ${fffilter_audio:+-filter_complex} "${fffilter_audio}" "${FFAENC[@]}" -map "${ffmap_video}" -map "${ffmap_audio}" -f flv "${ffoutput}")
+FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}" -filter:"${ffmap_video}" "${fffilter_video_deint}${fffilter_video}" "${FFVENC[@]}" -force_key_frames "${ffkeyframes}" ${fffilter_audio:+-filter_complex} "${fffilter_audio}" "${FFAENC[@]}" -map "${ffmap_video}" -map "${ffmap_audio}" -f flv "${ffoutput}")
 
 if [ -n "${ffsnapfile}" ]; then
     FFOPTS+=(-f image2 -updatefirst 1 -filter:"${ffmap_video}" "fps=fps=1/5,${fffilter_video}" -map "${ffmap_video}" "${ffsnapfile}")
