@@ -1,64 +1,201 @@
 #!/bin/bash
 
 do_usage () {
-echo $0 -i input-stream -o rtmp-output-url -v src-video-stream-id \
-    -a src-audio-stream-id[:audio-channel] [-c crop-dimensions-offset -s scale-dimensions \
-    -k keyframe-interval-hard -f ffmpeg-encoding-options-file \
-    -j snapshot-file \
-    -b abg-monitor-Input/Output/Raw[:abg-port:abg-silence-threshold:abg-report-volume:abg-address] \
-    -p pidfile -l facility.level -d{aemonize}] >&2
+cat >&2 <<EOF
+Usage: $0 -i input-stream -o rtmp-output-url -v src-video-stream-id
+    -a src-audio-stream-id[:audio-channel] [OPTIONS]
+
+FFmpeg wrapper script for live transcoding and RTMP streaming
+
+Mandatory arguments to long options are mandatory for short options too.
+
+Required parameters:
+  -i, --input=input-stream	input stream
+  -o, --output=rtmp-output-url	RTMP output URL
+  -v, --videosrc=src=stream-id	Source video stream selector
+  -a, --audiosrc=src-stream-id[:audio-channel]
+				Source audio stream and channel selector
+				The selected channel, if specified, is duplicated to stereo output
+				using a pan audio filter.
+Optional parameters:
+  -c, --crop=pix-x:pix-y:offset-x,offset-y
+				Image crop filter dimensions and offset
+  -s, --scale=x:y		Image scale dimensions (output SAR hardcoded to 1/1)
+  -k, --keyint=seconds		Imposed (hard) keyframe interval (Default: 4)
+  -f, --ffopts-file=file	Read FFmpeg encoding parameters from this file
+				(FFVENC, FFAENC bash arrays)
+  -j, --snap-file=file		Generate image snapshot every 5 seconds and store it in
+				the specified file
+  -b, --audiobargraph=i[nput]/o[utput]/r[aw][:tcp-port:silence-threshold:report-volume:ip-address]
+				Pipe to VLC with Audio Bar Graph filter for audio monitoring
+				i/o/r: output audio: same as input (copy), same as output or raw
+				tcp-port: direct ABGA output to this port (default: 6514)
+				silence-threshold: float (default: 0.01)
+				report-volume: integer (default: 0)
+				ip-address: Direct ABGA output to this (IPv4) address (default: 127.0.0.1)
+  -p, --pidfile			Write FFmpeg PID to this file
+  -l, --syslog=[facility.level] Redirect FFmpeg standard error to syslog, optionally using specified
+				facility and level (default: daemon.notice)
+  -d, --daemon			Run FFmpeg as a daemon
+
+EOF
 }
 
 daemonize=false
 declare -A opts;
-while true; do
-    getopts i:o:c:s:k:f:a:v:l:j:b:p:dh opt || break
-    case $opt in
-	h)
-	    do_usage
-	    exit 0
-	    ;;
-	i)
-	    opts[input]="$OPTARG"
-	    ;;
-	o)
-	    opts[output]="$OPTARG"
-	    ;;
-	c)
-	    opts[crop]="$OPTARG"
-	    ;;
-	s)
-	    opts[scale]="$OPTARG"
-	    ;;
-	k)
-	    opts[keyint]="$OPTARG"
-	    ;;
-	f)
-	    opts[ffparams]="$OPTARG"
-	    ;;
-	a)
-	    opts[audiosrc]="$OPTARG"
-	    ;;
-	v)
-	    opts[videosrc]="$OPTARG"
-	    ;;
-	j)
-	    opts[snapfile]="$OPTARG"
-	    ;;
-	b)
-	    opts[audiobargraph]="$OPTARG"
-	    ;;
-	p)
-	    opts[pidfile]="$OPTARG"
-	    ;;
-	l)
-	    opts[syslog]="$OPTARG"
-	    ;;
-	d)
-	    daemonize=true
-	    ;;
-    esac
-done
+
+test_getopt="$(GETOPT_COMPATIBLE=1 getopt -T)"
+if [ $? -eq 4 -a -z "$test_getopt" ]; then
+    getopt_flavor=1
+else
+    SCRIPTDIR="$(dirname $(readlink -f "$0"))"
+    if [ -f "${SCRIPTDIR}/getopts_long.sh" -a -r "${SCRIPTDIR}/getopts_long.sh" ]; then
+	. "${SCRIPTDIR}/getopts_long.sh"
+	if declare -f getopts_long >/dev/null; then
+	    getopt_flavor=2
+	fi
+    fi
+fi
+
+if [ -z "$getopt_flavor" ]; then
+    echo "either getopt(1) from util-linux or getopts_long.sh is required, but none was found" >&2
+    exit 1
+fi
+
+if [ $getopt_flavor -eq 1 ]; then
+    params="$(getopt -o i:o:c:s:k:f:a:v:l::j:b:p:dh \
+		-l input:,output:,crop:,scale:,keyint: \
+		-l ffopts-file:,audiosrc:,videosrc: \
+		-l snap-file:,audiobargraph:,pidfile: \
+		-l syslog::,daemon,help -n "$0" -- "$@")"
+
+    #declare -p params
+    eval set -- "$params"
+
+    while true; do
+	case "$1" in
+	    -h|--help)
+		do_usage
+		exit 0
+		;;
+	    -i|--input)
+		opts[input]="$2"
+		shift 2
+		;;
+	    -o|--output)
+		opts[output]="$2"
+		shift 2
+		;;
+	    -c|--crop)
+		opts[crop]="$2"
+		shift 2
+		;;
+	    -s|--scale)
+		opts[scale]="$2"
+		shift 2
+		;;
+	    -k|--keyint)
+		opts[keyint]="$2"
+		shift 2
+		;;
+	    -f|--ffopts-file)
+		opts[ffparams]="$2"
+		shift 2
+		;;
+	    -a|--audiosrc)
+		opts[audiosrc]="$2"
+		shift 2
+		;;
+	    -v|--videosrc)
+		opts[videosrc]="$2"
+		shift 2
+		;;
+	    -j|--snap-file)
+		opts[snapfile]="$2"
+		shift 2
+		;;
+	    -b|--audiobargraph)
+		opts[audiobargraph]="$2"
+		shift 2
+		;;
+	    -p|--pidfile)
+		opts[pidfile]="$2"
+		shift 2
+		;;
+	    -l|--syslog)
+		opts[syslog]="${2:-daemon.notice}"
+		shift 2
+		;;
+	    -d|--daemon)
+		daemonize=true
+		shift
+		;;
+	    --)
+		shift
+		break
+		;;
+	    *)
+		do_usage
+		exit 1
+		;;
+	esac
+    done
+elif [ $getopt_flavor -eq 2 ]; then
+    OPTLIND=1
+    while getopts_long i:o:c:s:k:f:a:v:l::j:b:p:dh opt \
+	input 1 output 1 crop 1 scale 1 keyint 1 \
+	ffopts-file 1 audiosrc 1 videosrc 1 \
+	snap-file 1 audiobargraph 1 pidfile 1 \
+	syslog 2 daemon 0 help 0 \
+	"" "$@"
+    do
+	case "$opt" in
+	    h|help)
+		do_usage
+		exit 0
+		;;
+	    i|input)
+		opts[input]="$OPTLARG"
+		;;
+	    o|output)
+		opts[output]="$OPTLARG"
+		;;
+	    c|crop)
+		opts[crop]="$OPTLARG"
+		;;
+	    s|scale)
+		opts[scale]="$OPTLARG"
+		;;
+	    k|keyint)
+		opts[keyint]="$OPTLARG"
+		;;
+	    f|ffopts-file)
+		opts[ffparams]="$OPTLARG"
+		;;
+	    a|audiosrc)
+		opts[audiosrc]="$OPTLARG"
+		;;
+	    v|videosrc)
+		opts[videosrc]="$OPTLARG"
+		;;
+	    j|snap-file)
+		opts[snapfile]="$OPTLARG"
+		;;
+	    b|audiobargraph)
+		opts[audiobargraph]="$OPTLARG"
+		;;
+	    p|pidfile)
+		opts[pidfile]="$OPTLARG"
+		;;
+	    l|syslog)
+		opts[syslog]="${OPTLARG:-daemon.notice}"
+		;;
+	    d|daemon)
+		daemonize=true
+		;;
+	esac
+    done
+fi
 
 ffinput="${opts[input]}"
 test -n "${ffinput}" || { do_usage; exit 1; }
