@@ -20,7 +20,7 @@ Required parameters:
 Optional parameters:
   -c, --crop=pix-x:pix-y:offset-x,offset-y
 				Image crop filter dimensions and offsets
-  -s, --scale=x:y		Image scale dimensions (output SAR hardcoded to 1/1)
+  -s, --scale=x:y		Image scale dimensions (output SAR hardcoded to 1:1)
       --deint[=filter]		Deinterlace video, optionally using specified filter
   -k, --keyint=seconds		Imposed (hard) keyframe interval (Default: 4)
   -f, --ffopts-file=file	Read FFmpeg encoding parameters from this file

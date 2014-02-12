@@ -32,9 +32,9 @@ Optional parameters:
 				FFAENC_key: FFmpeg audio encoding parameters for this rendition
 				or
 				FFAENC_COMMON: FFmpeg audio encoding parameters common for all
-				renditions (required if audiobargraph is used)
+				renditions (required if --audiobargraph=o is used)
 				FFSCALE: associative array specifying image scale dimensions per
-				rendition (output SAR hardcoded to 1/1)
+				rendition (output SAR hardcoded to 1:1)
 				FFDEINTERLACE: associative array specifying deinterlace filter per
 				rendition
   -j, --snap-prefix=path	For each rendition, take a snapshot every 5 seconds and write it to a
@@ -42,7 +42,7 @@ Optional parameters:
   -b, --audiobargraph=i[nput]/o[utput]/r[aw][:tcp-port:silence-threshold:report-volume:ip-address]
 				Pipe to VLC with Audio Bar Graph filter for audio monitoring
 				i/o/r: output audio: same as input (copy), same as output or raw
-				(FFAENC_COMMON is required in order to use "o")
+				(FFAENC_COMMON is required for --audiobargraph=o)
 				tcp-port: direct ABG output to this port (default: 6514)
 				silence-threshold: float (default: 0.01)
 				report-volume: integer (default: 0)
