@@ -50,7 +50,11 @@ test_getopt="$(getopt -T)"
 if [ $? -eq 4 -a -z "$test_getopt" ]; then
     getopt_flavor=1
 else
-    SCRIPTDIR="$(dirname $(readlink -f "$0"))"
+    SCRIPTDIR="$(cd "${0%/*}" 2>/dev/null && pwd -P)"
+    if [ $? -ne 0 ]; then
+	echo "could not cd to ${0%/*}, SCRIPTDIR may be wrong" >&2;
+	SCRIPTDIR="${0/*}"
+    fi
     getopt_src=$(which getopts_long.sh || echo "${SCRIPTDIR}/getopts_long.sh")
     if [ -f "${getopt_src}" -a -r "${getopt_src}" ]; then
 	. "${getopt_src}"
