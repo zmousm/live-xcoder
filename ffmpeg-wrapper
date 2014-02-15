@@ -350,7 +350,11 @@ if [ ${#ffabg[@]} -ne 0 ]; then
     if [ $? -ne 0 ]; then
 	exit 1
     fi
-    vlc_audiobargraph "${ffabgfifo}"
+    if [ "${daemonize}" = true -o -n "${ffsyslog}" ]; then
+	vlc_audiobargraph "${ffabgfifo}" 2>/dev/null
+    else
+	vlc_audiobargraph "${ffabgfifo}"
+    fi
     exec 4>"${ffabgfifo}"
 fi
 
