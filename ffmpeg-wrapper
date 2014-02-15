@@ -316,7 +316,7 @@ fi
 
 vlc_audiobargraph () {
     vlc_abgfifo="$1"
-    vlc -I dummy --daemon --pidfile="${vlcpidfile}" \
+    vlc -I dummy --ignore-config --daemon --pidfile="${vlcpidfile}" \
 	--play-and-exit \
 	--no-video --aout dummy \
 	--audio-filter="audiobargraph_a" \
@@ -345,7 +345,7 @@ if [ ${#ffabg[@]} -ne 0 ]; then
 	vlcsyslogfacility="${ffsyslog%.*}"
 	VLCOPTS+=(--syslog --syslog-facility="${vlcsyslogfacility:-daemon}")
     fi
-    ffabgfifo=$(mktemp -u)
+    ffabgfifo=$(mktemp -u "${vlcpidpath}/abgafifo.XXXXXXXXXX")
     mkfifo "$ffabgfifo"
     if [ $? -ne 0 ]; then
 	exit 1
