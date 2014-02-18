@@ -382,7 +382,7 @@ fi
 if [ "$daemonize" = true ]; then
     exec 3<&${COPROC[0]}
     {
-	/usr/bin/logger -p "${ffsyslog:-daemon.notice}" -t "$(ps -p ${FFPID} -o comm=)[${FFPID}]"
+	/usr/bin/logger -p "${ffsyslog:-daemon.notice}" -t "ffmpeg[${FFPID}]"
 	[ ${#ffabg[@]} -ne 0 ] && rm -f "${ffabgfifo}"
 	rm -f "${ffpidfile}"
     } <&3 &
@@ -390,6 +390,6 @@ if [ "$daemonize" = true ]; then
 elif [ -n "${ffsyslog}" ]; then
     trap 'rm -f "${ffpidfile}"' HUP INT QUIT TERM KILL
     [ ${#ffabg[@]} -ne 0 ] && trap 'rm -f "${ffabgfifo}"' HUP INT QUIT TERM KILL
-    /usr/bin/logger -p "${ffsyslog}" -t "$(ps -p ${FFPID} -o comm=)[${FFPID}]" <&${COPROC[0]}
+    /usr/bin/logger -p "${ffsyslog}" -t "ffmpeg[${FFPID}]" <&${COPROC[0]}
     kill $$
 fi
