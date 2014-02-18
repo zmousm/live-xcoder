@@ -7,8 +7,8 @@
 # Should-Stop:       $time $named nxlog
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: xcoder (FFmpeg)
-# Description:       live transcoding and streaming service (FFmpeg)
+# Short-Description: xcoder (FFmpeg-based)
+# Description:       live transcoding and streaming service (FFmpeg-based)
 #                    
 ### END INIT INFO
 
@@ -18,18 +18,18 @@
 
 # PATH should only include /usr/* if it runs after the mountnfs.sh script
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/usr/sbin:/bin:/usr/bin
-# useless
-DESC="xcoder (FFmpeg)"
+# unused
+DESC="xcoder (FFmpeg-based)"
 NAME=xcoder
 USER=xcoder
 GROUP=xcoder
 CONFIGFILE=/home/zmousm/live-xcoder/xcoder.ini
 #DAEMON=/usr/sbin/$NAME
-declare -Ax WRAPPER
+declare -A WRAPPER FFOPTS
 WRAPPER[simple]=/home/zmousm/live-xcoder/ffmpeg-wrapper
 WRAPPER[abr]=/home/zmousm/live-xcoder/ffmpeg-wrapper-abr
 PIDDIR=/var/run/xcoder
-SNAPDIR=/tmp
+SNAPDIR=/var/www/snap
 #PIDFILE=/var/run/$NAME.pid
 #PIDFILE=/home/zmousm/vlm/vlc119.pid
 SCRIPTNAME=/etc/init.d/$NAME
@@ -49,9 +49,6 @@ KEYINT=4
 
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
-
-# tmp
-VERBOSE=yes
 
 # Define LSB log_* functions.
 # Depend on lsb-base (>= 3.0-6) to ensure that this file is present.
@@ -122,12 +119,15 @@ fi
 
 # config parsing
 if [ -r "$CONFIGFILE" ]; then
+    # temp reduce verbosity
+    [[ $- == *x* ]] && { fliptrace=yes ; set +x ;}
     cfg="$(ini2arr "$CONFIGFILE")"
     if [ $? -ne 0 -o -z "$cfg" ]; then
 	exit 1 # config parsing error
     else
 	eval "$cfg"
 	unset cfg
+	[ "$fliptrace" = yes ] && set -x
     fi
 else
     exit 1 # cant work without config
@@ -157,7 +157,7 @@ instance_start()
 	-o "${output[$i]}" \
 	-v "${video[$i]}" \
 	-a "${audio[$i]}" \
-	-f "${ffopts[$i]:-${FFOPTS[${flavor[$i]}]}}" \
+	-f "${ffopts[$i]:-${FFOPTS[${flavor[$i]:-simple}]}}" \
 	-k "${keyint[$i]:-$KEYINT}" \
 	-p "${PIDFILE}" \
 	-d )
@@ -346,7 +346,7 @@ shift
 if [ $# -ne 0 ]; then
     instances=("$@")
 else
-    instances=("${ACTIVEINSTANCES[@]}")
+    instances=("${INSTANCES[@]}")
 fi
 
 if [ ${#instances[@]} -eq 0 ]; then
