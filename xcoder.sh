@@ -31,6 +31,7 @@ WRAPPER[abr]=/home/zmousm/live-xcoder/ffmpeg-wrapper-abr
 PIDDIR=/var/run/xcoder
 SNAPDIR=/var/www/snap
 ABGADIR=/tmp
+MONITDIR=/etc/monit/xcoder.d
 #PIDFILE=/var/run/$NAME.pid
 #PIDFILE=/home/zmousm/vlm/vlc119.pid
 SCRIPTNAME=/etc/init.d/$NAME
@@ -393,7 +394,11 @@ sed "s#%PIDFILE%#${PIDFILE}#g;s#%SCRIPTNAME%#${SCRIPTNAME}#g;s!%DEPENDENCIES%!${
     monit_cfg+="${monit_cfg_extra}"
     monit_cfg="$(echo "$monit_cfg" | sed -s "s#%NAME%#${i}#g;")"
 
-    echo "$monit_cfg"
+    # [ "$VERBOSE" != no ] && log_daemon_msg "Generating $NAME instance monit config" "${label[$i]} [$i]"
+    [ "$VERBOSE" != no ] && log_progress_msg "$i"
+    echo "$monit_cfg" > "${MONITDIR}/${i}" && chmod 0600 "${MONITDIR}/${i}"
+    RETVAL=$?
+    return $RETVAL
 }
 
 do_start()
@@ -461,8 +466,7 @@ do_status()
 do_monit()
 {
     local RETVAL r
-    [ "$VERBOSE" != no ] && log_daemon_msg "Generating monit configuration for $NAME instances" "dummy"
-    echo
+    [ "$VERBOSE" != no ] && log_daemon_msg "Generating $NAME instances monit configs"
     RETVAL=0
     for i in "${instances[@]}"; do
 	((instances_idx++))
@@ -475,10 +479,10 @@ do_monit()
     # for r in "${RETVALS[@]}"; do
     # 	[ $r -gt $RETVAL ] && RETVAL="$r"
     # done
-    # case "$RETVAL" in
-    # 	0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
-    # 	2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
-    # esac
+    case "$RETVAL" in
+    	0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+    	2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+    esac
     return $RETVAL
 }
 
