@@ -343,19 +343,21 @@ EOF
     local deps=()
     local monit_cfg monit_cfg_extra
 
+    # abga
     if [ -n "${abga[$i]}" ]; then
 	deps+=("xcoder-${i}_confidence_audio")
 	monit_cfg_extra+="
 $(echo "$TMPL_CONFI_A" | \
-sed "s#%NAME%#${i}#g;s#%ABGARATEFILE%#${ABGADIR}/abga.${abga[$i]}.rate#g;")"
+sed "s#%ABGARATEFILE%#${ABGADIR}/abga.${abga[$i]}.rate#g;")"
     fi
 
+    # snapshot (one or multiple)
     if [ -n "${snap[$i]}" ]; then
 	if [ "${flavor[$i]:-simple}" = simple ]; then
 	    deps+=("xcoder-${i}_confidence_video")
 	    monit_cfg_extra+="
 $(echo "$TMPL_CONFI_V" | \
-sed "s#%NAME%#${i}#g;s#%RENDITION%##g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}.jpg#g;")"
+sed "s#%RENDITION%##g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}.jpg#g;")"
 	elif [ "${flavor[$i]:-simple}" = abr ]; then
 	    if [ -f "${ffopts[$i]:-${FFOPTS[${flavor[$i]}]}}" -a \
 		-r "${ffopts[$i]:-${FFOPTS[${flavor[$i]}]}}" ]; then
@@ -365,13 +367,14 @@ sed "s#%NAME%#${i}#g;s#%RENDITION%##g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}.jpg#g;
 			deps+=("xcoder-${i}_confidence_video${r}")
 			monit_cfg_extra+="
 $(echo "$TMPL_CONFI_V" | \
-sed "s#%NAME%#${i}#g;s#%RENDITION%#${r}#g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}${r}.jpg#g;")"
+sed "s#%RENDITION%#${r}#g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}${r}.jpg#g;")"
 		    done
 		fi
 	    fi
 	fi
     fi
 
+    # prepare dependencies on extras
     local depsep depstring
     depsep=", "
     depstring="$(printf "${depsep}%s" "${deps[@]}")"
@@ -382,9 +385,13 @@ sed "s#%NAME%#${i}#g;s#%RENDITION%#${r}#g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}${r
 	depstring='#'
     fi
 
+    # main
     monit_cfg="$(echo "$TMPL_FFMPEG" | \
-sed "s#%NAME%#${i}#g;s#%PIDFILE%#${PIDFILE}#g;s#%SCRIPTNAME%#${SCRIPTNAME}#g;s!%DEPENDENCIES%!${depstring}!g;")"
+sed "s#%PIDFILE%#${PIDFILE}#g;s#%SCRIPTNAME%#${SCRIPTNAME}#g;s!%DEPENDENCIES%!${depstring}!g;")"
+
+    # concatenate main and extras
     monit_cfg+="${monit_cfg_extra}"
+    monit_cfg="$(echo "$monit_cfg" | sed -s "s#%NAME%#${i}#g;")"
 
     echo "$monit_cfg"
 }
