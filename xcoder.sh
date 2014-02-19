@@ -30,6 +30,7 @@ WRAPPER[simple]=/home/zmousm/live-xcoder/ffmpeg-wrapper
 WRAPPER[abr]=/home/zmousm/live-xcoder/ffmpeg-wrapper-abr
 PIDDIR=/var/run/xcoder
 SNAPDIR=/var/www/snap
+ABGADIR=/tmp
 #PIDFILE=/var/run/$NAME.pid
 #PIDFILE=/home/zmousm/vlm/vlc119.pid
 SCRIPTNAME=/etc/init.d/$NAME
@@ -141,13 +142,13 @@ instance_start()
 
     # preliminary checks, return immediately if something vital is missing
     if [ -z "$i" -o -z "${input[$i]}" ]; then
-	return 1
+	return 2
     fi
     DAEMON="${WRAPPER[${flavor[$i]:-simple}]}"
     if [ -e "$DAEMON" -a -f "$DAEMON" -a -x "$DAEMON" ]; then
 	:
     else
-	return 1
+	return 2
     fi
 
     PIDFILE+="${PIDDIR}/ffmpeg.${pid[$i]:-$i}.pid"
@@ -224,7 +225,7 @@ instance_stop()
 
     # preliminary checks, return immediately if something vital is missing
     if [ -z "$i" -o -z "${input[$i]}" ]; then
-	return 1
+	return 2
     fi
 
     PIDFILE+="${PIDDIR}/ffmpeg.${pid[$i]:-$i}.pid"
@@ -269,13 +270,13 @@ instance_status()
 
     # preliminary checks, return immediately if something vital is missing
     if [ -z "$i" -o -z "${input[$i]}" ]; then
-	return 1
+	return 2
     fi
     DAEMON="${WRAPPER[${flavor[$i]:-simple}]}"
     if [ -e "$DAEMON" -a -f "$DAEMON" -a -x "$DAEMON" ]; then
 	:
     else
-	return 1
+	return 2
     fi
 
     PIDFILE+="${PIDDIR}/ffmpeg.${pid[$i]:-$i}.pid"
@@ -287,6 +288,105 @@ instance_status()
 	&& RETVAL=0 || RETVAL=$?
 
     return $RETVAL
+}
+
+instance_monit()
+{
+    local i DAEMON DAEMON_ARGS PIDFILE
+    local TMPL_FFMPEG TMPL_CONFI_V TMPL_CONFI_A
+
+    i=$1
+
+    # preliminary checks, return immediately if something vital is missing
+    if [ -z "$i" -o -z "${input[$i]}" ]; then
+	return 2
+    fi
+    DAEMON="${WRAPPER[${flavor[$i]:-simple}]}"
+    if [ -e "$DAEMON" -a -f "$DAEMON" -a -x "$DAEMON" ]; then
+	:
+    else
+	return 2
+    fi
+
+    PIDFILE+="${PIDDIR}/ffmpeg.${pid[$i]:-$i}.pid"
+
+    assign(){ IFS='\n' read -r -d '' ${1} || true; }
+
+    # monit template fragments
+    assign TMPL_FFMPEG <<'EOF'
+set daemon 15
+
+check process xcoder-%NAME%_ffmpeg with pidfile %PIDFILE%
+  group xcoder-%NAME%
+  %DEPENDENCIES%
+  start program = "%SCRIPTNAME% start %NAME%"
+    with timeout 15 seconds
+  stop program = "%SCRIPTNAME% stop %NAME%"
+EOF
+
+    assign TMPL_CONFI_V <<'EOF'
+check file xcoder-%NAME%_confidence_video%RENDITION% with path %SNAPFILE%
+  group xcoder-%NAME%
+  depends on workspace-fs
+  if timestamp > 15 seconds then restart
+  if size < 2 KB then restart
+EOF
+
+    assign TMPL_CONFI_A <<'EOF'
+check file xcoder-%NAME%_confidence_audio with path %ABGARATEFILE%
+  group xcoder-%NAME%
+  depends on nxlog, workspace-fs
+  #if timestamp > 15 seconds then restart
+  if match "^0$" 2 cycles then restart
+EOF
+
+    local deps=()
+    local monit_cfg monit_cfg_extra
+
+    if [ -n "${abga[$i]}" ]; then
+	deps+=("xcoder-${i}_confidence_audio")
+	monit_cfg_extra+="
+$(echo "$TMPL_CONFI_A" | \
+sed "s#%NAME%#${i}#g;s#%ABGARATEFILE%#${ABGADIR}/abga.${abga[$i]}.rate#g;")"
+    fi
+
+    if [ -n "${snap[$i]}" ]; then
+	if [ "${flavor[$i]:-simple}" = simple ]; then
+	    deps+=("xcoder-${i}_confidence_video")
+	    monit_cfg_extra+="
+$(echo "$TMPL_CONFI_V" | \
+sed "s#%NAME%#${i}#g;s#%RENDITION%##g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}.jpg#g;")"
+	elif [ "${flavor[$i]:-simple}" = abr ]; then
+	    if [ -f "${ffopts[$i]:-${FFOPTS[${flavor[$i]}]}}" -a \
+		-r "${ffopts[$i]:-${FFOPTS[${flavor[$i]}]}}" ]; then
+		. "${ffopts[$i]:-${FFOPTS[${flavor[$i]}]}}"
+		if [ $? -eq 0 -a "${#RENDITIONS[@]}" -ne 0 ]; then
+		    for r in "${RENDITIONS[@]}"; do
+			deps+=("xcoder-${i}_confidence_video${r}")
+			monit_cfg_extra+="
+$(echo "$TMPL_CONFI_V" | \
+sed "s#%NAME%#${i}#g;s#%RENDITION%#${r}#g;s#%SNAPFILE%#${SNAPDIR}/${snap[$i]}${r}.jpg#g;")"
+		    done
+		fi
+	    fi
+	fi
+    fi
+
+    local depsep depstring
+    depsep=", "
+    depstring="$(printf "${depsep}%s" "${deps[@]}")"
+    depstring="${depstring:${#depsep}}"
+    if [ -n "$depstring" ]; then
+	depstring="depends on $depstring"
+    else
+	depstring='#'
+    fi
+
+    monit_cfg="$(echo "$TMPL_FFMPEG" | \
+sed "s#%NAME%#${i}#g;s#%PIDFILE%#${PIDFILE}#g;s#%SCRIPTNAME%#${SCRIPTNAME}#g;s!%DEPENDENCIES%!${depstring}!g;")"
+    monit_cfg+="${monit_cfg_extra}"
+
+    echo "$monit_cfg"
 }
 
 do_start()
@@ -351,6 +451,30 @@ do_status()
     return $RETVAL
 }
 
+do_monit()
+{
+    local RETVAL r
+    [ "$VERBOSE" != no ] && log_daemon_msg "Generating monit configuration for $NAME instances" "dummy"
+    echo
+    RETVAL=0
+    for i in "${instances[@]}"; do
+	((instances_idx++))
+	instance_monit "$i"
+	r=$?
+	[ $r -gt $RETVAL ] && RETVAL=$r
+	# RETVALS+=($?)
+    done
+    unset instances_idx
+    # for r in "${RETVALS[@]}"; do
+    # 	[ $r -gt $RETVAL ] && RETVAL="$r"
+    # done
+    # case "$RETVAL" in
+    # 	0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+    # 	2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+    # esac
+    return $RETVAL
+}
+
 action=$1
 shift
 if [ $# -ne 0 ]; then
@@ -394,6 +518,9 @@ case "$action" in
     	  # 	;;
     	esac
     	;;
+    monit)
+	do_monit
+	;;
     *)
 	#echo "Usage: $SCRIPTNAME {start|stop|restart|reload|force-reload}" >&2
 	echo "Usage: $SCRIPTNAME {start|stop|status|restart|force-reload}" >&2
