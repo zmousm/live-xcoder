@@ -201,6 +201,12 @@ instance_start()
 	# Add code here, if necessary, that waits for the process to be ready
 	# to handle requests from services started subsequently which depend
 	# on this one.  As a last resort, sleep for some time.
+	#
+	# pseudo-random delay (1-4 secs) between instance
+	# startup to avoid potential resource starvation
+	if [ ${instances_idx} -lt ${#instances[@]} ]; then
+	    sleep $(((RANDOM >> 13)+1))s	    
+	fi
     fi
 
     # case "$RETVAL" in
@@ -291,11 +297,13 @@ do_start()
     [ "$VERBOSE" != no ] && log_daemon_msg "$adverb $NAME instances"
     RETVAL=0
     for i in "${instances[@]}"; do
+	((instances_idx++))
 	instance_start "$i"
 	r=$?
 	[ $r -gt $RETVAL ] && RETVAL=$r
 	# RETVALS+=($?)
     done
+    unset instances_idx
     # for r in "${RETVALS[@]}"; do
     # 	[ $r -gt $RETVAL ] && RETVAL=$r
     # done
@@ -312,11 +320,13 @@ do_stop()
     [ "$VERBOSE" != no ] && log_daemon_msg "Stopping $NAME instances"
     RETVAL=0
     for i in "${instances[@]}"; do
+	((instances_idx++))
 	instance_stop "$i"
 	r=$?
 	[ $r -gt $RETVAL ] && RETVAL=$r
 	# RETVALS+=($?)
     done
+    unset instances_idx
     # for r in "${RETVALS[@]}"; do
     # 	[ $r -gt $RETVAL ] && RETVAL="$r"
     # done
@@ -352,6 +362,8 @@ fi
 if [ ${#instances[@]} -eq 0 ]; then
     exit 1 # cant work without any instances
 fi
+
+export instances
 
 # must find a way to optionally kill previously active instances
 case "$action" in
