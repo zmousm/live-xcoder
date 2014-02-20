@@ -24,10 +24,12 @@ NAME=xcoder
 USER=xcoder
 GROUP=xcoder
 CONFIGFILE=/home/zmousm/live-xcoder/xcoder.ini
+CROPDETECT=/home/zmousm/live-xcoder/cropdetect.ini
 #DAEMON=/usr/sbin/$NAME
 declare -A WRAPPER FFOPTS
 WRAPPER[simple]=/home/zmousm/live-xcoder/ffmpeg-wrapper
 WRAPPER[abr]=/home/zmousm/live-xcoder/ffmpeg-wrapper-abr
+FFMPEG=/usr/bin/ffmpeg
 PIDDIR=/var/run/xcoder
 SNAPDIR=/var/www/snap
 ABGADIR=/tmp
@@ -122,13 +124,16 @@ fi
 # config parsing
 if [ -r "$CONFIGFILE" ]; then
     # temp reduce verbosity
+    cfgfiles=("$CONFIGFILE")
+    [ -r "$CROPDETECT" ] && cfgfiles+=("$CROPDETECT")
     [[ $- == *x* ]] && { fliptrace=yes ; set +x ;}
-    cfg="$(ini2arr "$CONFIGFILE")"
+    cfg="$(ini2arr "${cfgfiles[@]}")"
     if [ $? -ne 0 -o -z "$cfg" ]; then
 	exit 1 # config parsing error
     else
 	eval "$cfg"
 	unset cfg
+	unset cfgfiles
 	[ "$fliptrace" = yes ] && set -x
     fi
 else
@@ -293,7 +298,7 @@ instance_status()
 
 instance_monit()
 {
-    local i DAEMON DAEMON_ARGS PIDFILE
+    local i PIDFILE
     local TMPL_FFMPEG TMPL_CONFI_V TMPL_CONFI_A
 
     i=$1
@@ -401,6 +406,40 @@ sed "s#%PIDFILE%#${PIDFILE}#g;s#%SCRIPTNAME%#${SCRIPTNAME}#g;s!%DEPENDENCIES%!${
     return $RETVAL
 }
 
+# this should be typically handled by ffmpeg-wrapper
+# but it is an overkill while cropdetect is the only relevant filter
+instance_cropdetect()
+{
+    local i cropdet
+
+    i=$1
+
+    # preliminary checks, return immediately if something vital is missing
+    if [ -z "$i" -o -z "${input[$i]}" ]; then
+	return 2
+    fi
+
+    #set -x
+
+    # [ "$VERBOSE" != no ] && log_daemon_msg "Generating $NAME instance monit config" "${label[$i]} [$i]"
+    [ "$VERBOSE" != no ] && log_progress_msg "$i"
+
+    cropdet="$($FFMPEG -nostats -nostdin -re -i "${input[$i]}" -t 1 \
+	-filter:0:"${video[$i]}" cropdetect -an -f null - 2>&1 | \
+	/usr/bin/awk '$1 ~ /Parsed_cropdetect/ { crop = gensub(/^crop=/, "", "", $NF) };
+		      END { print crop }')"
+    RETVAL=$?
+
+    [ $RETVAL -ne 0 ] && return 2
+
+    if [ -z "$cropdet" ]; then
+	return 1
+    fi
+
+    crop[$i]="${cropdet}"
+    return $RETVAL
+}
+
 do_start()
 {
     local RETVAL r
@@ -432,13 +471,11 @@ do_stop()
     [ "$VERBOSE" != no ] && log_daemon_msg "Stopping $NAME instances"
     RETVAL=0
     for i in "${instances[@]}"; do
-	((instances_idx++))
 	instance_stop "$i"
 	r=$?
 	[ $r -gt $RETVAL ] && RETVAL=$r
 	# RETVALS+=($?)
     done
-    unset instances_idx
     # for r in "${RETVALS[@]}"; do
     # 	[ $r -gt $RETVAL ] && RETVAL="$r"
     # done
@@ -469,13 +506,11 @@ do_monit()
     [ "$VERBOSE" != no ] && log_daemon_msg "Generating $NAME instances monit configs"
     RETVAL=0
     for i in "${instances[@]}"; do
-	((instances_idx++))
 	instance_monit "$i"
 	r=$?
 	[ $r -gt $RETVAL ] && RETVAL=$r
 	# RETVALS+=($?)
     done
-    unset instances_idx
     # for r in "${RETVALS[@]}"; do
     # 	[ $r -gt $RETVAL ] && RETVAL="$r"
     # done
@@ -483,6 +518,64 @@ do_monit()
     	0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
     	2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
     esac
+    return $RETVAL
+}
+
+do_cropdetect()
+{
+    local RETVAL r cfg crop
+    # ensure that crop is an associative array
+    declare -A crop
+
+    # cropdetect config parsing
+    if [ -r "$CROPDETECT" ]; then
+	# temp reduce verbosity
+	[[ $- == *x* ]] && { fliptrace=yes ; set +x ;}
+	cfg="$(ini2arr "$CROPDETECT")"
+	if [ $? -ne 0 -o -z "$cfg" ]; then
+	    return 2 # config parsing error
+	else
+	    eval "$cfg"
+	    unset cfg
+	    [ "$fliptrace" = yes ] && set -x
+	fi
+    fi
+
+    [ -f "$CROPDETECT" -a -w "$CROPDETECT" ] || touch "$CROPDETECT" 2>/dev/null
+    if [ $? -ne 0 ]; then
+	return 2 # cant write to cropdetect file
+    fi
+
+    [ "$VERBOSE" != no ] && log_daemon_msg "Doing crop detection for $NAME instances"
+    RETVAL=0
+    for i in "${instances[@]}"; do
+	instance_cropdetect "$i"
+	r=$?
+	[ $r -gt $RETVAL ] && RETVAL=$r
+	# RETVALS+=($?)
+    done
+    # for r in "${RETVALS[@]}"; do
+    # 	[ $r -gt $RETVAL ] && RETVAL="$r"
+    # done
+    case "$RETVAL" in
+    	0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+    	2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+    esac
+
+    # temp reduce verbosity
+    [[ $- == *x* ]] && { fliptrace=yes ; set +x ;}
+    cfg="$({ for i in "${!crop[@]}";
+	do printf "%s\t%s\t%s\n" "$i" crop "${crop[$i]}";
+	done; } | \
+    	    tab2ini)"
+    if [ $? -ne 0 -o -z "$cfg" ]; then
+	return 2
+    else
+	echo "$cfg" > "$CROPDETECT"
+	unset cfg
+	[ "$fliptrace" = yes ] && set -x
+    fi
+
     return $RETVAL
 }
 
@@ -531,6 +624,9 @@ case "$action" in
     	;;
     monit)
 	do_monit
+	;;
+    cropdetect)
+	do_cropdetect
 	;;
     *)
 	#echo "Usage: $SCRIPTNAME {start|stop|restart|reload|force-reload}" >&2
