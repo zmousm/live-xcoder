@@ -1,0 +1,12 @@
+set daemon 15
+
+check process nxlog with pidfile "/var/run/nxlog/nxlog.pid"
+  depends workspace-fs
+  start program = "/etc/init.d/nxlog start"
+  stop program = "/etc/init.d/nxlog stop"
+
+check filesystem workspace-fs path /
+  if space usage > 90 % for 5 cycles then alert
+  if space usage > 94 % for 5 cycles then unmonitor
+
+include /etc/monit/xcoder.d/*
