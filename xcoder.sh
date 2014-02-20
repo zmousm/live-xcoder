@@ -21,29 +21,21 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/usr/sbin:/bin:/usr/bin
 # unused
 DESC="xcoder (FFmpeg-based)"
 NAME=xcoder
+SCRIPTNAME=/etc/init.d/$NAME
+
+# Defaults of defaults
 USER=xcoder
 GROUP=xcoder
 CONFIGFILE=/home/zmousm/live-xcoder/xcoder.ini
 CROPDETECT=/home/zmousm/live-xcoder/cropdetect.ini
-#DAEMON=/usr/sbin/$NAME
 declare -A WRAPPER FFOPTS
-WRAPPER[simple]=/home/zmousm/live-xcoder/ffmpeg-wrapper
-WRAPPER[abr]=/home/zmousm/live-xcoder/ffmpeg-wrapper-abr
+WRAPPER[simple]=/home/zmousm/live-xcoder/ffwrapper
+WRAPPER[abr]=/home/zmousm/live-xcoder/ffwrapper-abr
 FFMPEG=/usr/bin/ffmpeg
 PIDDIR=/var/run/xcoder
 SNAPDIR=/var/www/snap
 ABGADIR=/tmp
 MONITDIR=/etc/monit/xcoder.d
-#PIDFILE=/var/run/$NAME.pid
-#PIDFILE=/home/zmousm/vlm/vlc119.pid
-SCRIPTNAME=/etc/init.d/$NAME
-
-#DAEMON_ARGS="$DAEMON_ARGS --pidfile=$PIDFILE"
-
-# Exit if the package is not installed
-#[ -x "$DAEMON" ] || exit 0
-
-# Defaults of defaults
 FFOPTS[simple]=/home/zmousm/ffcodecs
 FFOPTS[abr]=/home/zmousm/ffcodecs-abr
 KEYINT=4
@@ -159,7 +151,7 @@ instance_start()
 
     PIDFILE+="${PIDDIR}/ffmpeg.${pid[$i]:-$i}.pid"
 
-    # ffmpeg-wrapper params preparation
+    # ffwrapper params preparation
     DAEMON_ARGS=(-i "${input[$i]}" \
 	-o "${output[$i]}" \
 	-v "${video[$i]}" \
@@ -205,11 +197,7 @@ instance_start()
 	start-stop-daemon --start --quiet --pidfile "$PIDFILE" -a "$DAEMON" -c $USER:$GROUP -- \
 	    "${DAEMON_ARGS[@]}" \
 	    || RETVAL=2
-	# Add code here, if necessary, that waits for the process to be ready
-	# to handle requests from services started subsequently which depend
-	# on this one.  As a last resort, sleep for some time.
-	#
-	# pseudo-random delay (1-4 secs) between instance
+	# semi-random delay (1-4 secs) between instance
 	# startup to avoid potential resource starvation
 	if [ ${instances_idx} -lt ${#instances[@]} ]; then
 	    sleep $(((RANDOM >> 13)+1))s	    
@@ -316,13 +304,11 @@ instance_monit()
 
     PIDFILE+="${PIDDIR}/ffmpeg.${pid[$i]:-$i}.pid"
 
-    assign(){ IFS='\n' read -r -d '' ${1} || true; }
+    assign() { IFS='\n' read -r -d '' ${1} || true; }
 
     # monit template fragments
     assign TMPL_FFMPEG <<'EOF'
-set daemon 15
-
-check process xcoder-%NAME%_ffmpeg with pidfile %PIDFILE%
+check process xcoder-%NAME%_ffmpeg with pidfile "%PIDFILE%"
   group xcoder-%NAME%
   %DEPENDENCIES%
   start program = "%SCRIPTNAME% start %NAME%"
@@ -406,7 +392,7 @@ sed "s#%PIDFILE%#${PIDFILE}#g;s#%SCRIPTNAME%#${SCRIPTNAME}#g;s!%DEPENDENCIES%!${
     return $RETVAL
 }
 
-# this should be typically handled by ffmpeg-wrapper
+# this should be typically handled by ffwrapper
 # but it is an overkill while cropdetect is the only relevant filter
 instance_cropdetect()
 {
@@ -593,7 +579,7 @@ fi
 
 export instances
 
-# must find a way to optionally kill previously active instances
+# todo: optionally (force-) kill previously active instances
 case "$action" in
     start)
 	do_start
