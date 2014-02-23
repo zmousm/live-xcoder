@@ -262,8 +262,7 @@ fffilter_video+="${opts[scale]:+scale=}${opts[scale]}${opts[scale]:+,}"
 fffilter_video+="setsar=1/1"
 ffkeyframes="expr:gte(t,n_forced*${opts[keyint]:=4})"
 
-FFVENC=(-c:v libx264 -profile:v baseline -preset:v faster -b:v 512k)
-FFAENC=(-c:a libfaac -b:a 128k)
+declare -a FFVENC FFAENC
 if [ -n "${opts[ffparams]}" -a -f "${opts[ffparams]}" -a -r "${opts[ffparams]}" ]; then
     . "${opts[ffparams]}"
 fi

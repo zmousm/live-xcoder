@@ -255,6 +255,8 @@ fi
 
 ffkeyframes="expr:gte(t,n_forced*${opts[keyint]:=4})"
 
+declare -a RENDITIONS
+declare -A FFSCALE FFDEINTERLACE
 if [ -n "${opts[ffparams]}" -a -f "${opts[ffparams]}" -a -r "${opts[ffparams]}" ]; then
     . "${opts[ffparams]}"
 else
@@ -268,10 +270,10 @@ if [ "${#RENDITIONS[@]}" -eq 0 ]; then
 fi
 FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}")
 for rendition in "${RENDITIONS[@]}"; do
-    fffilter_video_deint="${FFDEINTERLACE[rendition]}${FFDEINTERLACE[rendition]:+,}"
+    fffilter_video_deint="${FFDEINTERLACE[$rendition]}${FFDEINTERLACE[$rendition]:+,}"
     fffilter_video="${opts[crop]:+crop=}${opts[crop]}${opts[crop]:+,}"
-    if [ -n "${FFSCALE[rendition]}" ]; then
-	fffilter_video+="scale=${FFSCALE[rendition]},"
+    if [ -n "${FFSCALE[$rendition]}" ]; then
+	fffilter_video+="scale=${FFSCALE[$rendition]},"
     else
 	echo "$0: FFSCALE must be specified for each rendition" >&2
 	exit 1
@@ -291,6 +293,8 @@ for rendition in "${RENDITIONS[@]}"; do
     fi
 
     FFOPTS+=(-filter:"${ffmap_video}" "${fffilter_video_deint}${fffilter_video}" "${FFVENC[@]}" -force_key_frames "${ffkeyframes}" ${fffilter_audio:+-filter_complex} "${fffilter_audio}" "${FFAENC[@]}" -map "${ffmap_video}" -map "${ffmap_audio}" -f flv "${ffoutputprefix}${rendition}")
+
+    unset FFVENC FFAENC
 
     if [ -n "${ffsnapfileprefix}" ]; then
 	FFOPTS+=(-f image2 -updatefirst 1 -filter:"${ffmap_video}" "fps=fps=1/5,${fffilter_video}" -map "${ffmap_video}" "${ffsnapfileprefix}${rendition}.jpg")
