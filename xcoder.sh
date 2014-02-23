@@ -317,7 +317,7 @@ check process xcoder-%NAME%_ffmpeg with pidfile "%PIDFILE%"
 EOF
 
     assign TMPL_CONFI_V <<'EOF'
-check file xcoder-%NAME%_confidence_video%RENDITION% with path %SNAPFILE%
+check file xcoder-%NAME%_confidence_video%RENDITION% with path "%SNAPFILE%"
   group xcoder-%NAME%
   depends on workspace-fs
   if timestamp > 15 seconds then restart
@@ -325,7 +325,7 @@ check file xcoder-%NAME%_confidence_video%RENDITION% with path %SNAPFILE%
 EOF
 
     assign TMPL_CONFI_A <<'EOF'
-check file xcoder-%NAME%_confidence_audio with path %ABGARATEFILE%
+check file xcoder-%NAME%_confidence_audio with path "%ABGARATEFILE%"
   group xcoder-%NAME%
   depends on nxlog, workspace-fs
   #if timestamp > 15 seconds then restart
