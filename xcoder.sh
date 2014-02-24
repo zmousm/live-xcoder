@@ -26,18 +26,18 @@ SCRIPTNAME=/etc/init.d/$NAME
 # Defaults of defaults
 USER=xcoder
 GROUP=xcoder
-CONFIGFILE=/home/zmousm/live-xcoder/xcoder.ini
-CROPDETECT=/home/zmousm/live-xcoder/cropdetect.ini
+CONFIGFILE=/etc/xcoder/xcoder.ini
+CROPDETECT=/etc/xcoder/cropdetect.ini
 declare -A WRAPPER FFOPTS
-WRAPPER[simple]=/home/zmousm/live-xcoder/ffwrapper
-WRAPPER[abr]=/home/zmousm/live-xcoder/ffwrapper-abr
+WRAPPER[simple]=/usr/local/bin/ffwrapper
+WRAPPER[abr]=/usr/local/bin/ffwrapper-abr
 FFMPEG=/usr/bin/ffmpeg
 PIDDIR=/var/run/xcoder
 SNAPDIR=/var/www/snap
 ABGADIR=/var/log/xcoder
 MONITDIR=/etc/monit/xcoder.d
-FFOPTS[simple]=/home/zmousm/ffcodecs
-FFOPTS[abr]=/home/zmousm/ffcodecs-abr
+FFOPTS[simple]=/etc/xcoder/ffcodecs.sh
+FFOPTS[abr]=/etc/xcoder/ffcodecs-abr.sh
 KEYINT=4
 
 # Read configuration variable file if it is present
@@ -405,14 +405,12 @@ instance_cropdetect()
 	return 2
     fi
 
-    #set -x
-
     # [ "$VERBOSE" != no ] && log_daemon_msg "Generating $NAME instance monit config" "${label[$i]} [$i]"
     [ "$VERBOSE" != no ] && log_progress_msg "$i"
 
     cropdet="$($FFMPEG -nostats -nostdin -re -i "${input[$i]}" -t 1 \
 	-filter:0:"${video[$i]}" cropdetect -an -f null - 2>&1 | \
-	/usr/bin/awk '$1 ~ /Parsed_cropdetect/ { crop = gensub(/^crop=/, "", "", $NF) };
+	awk '$1 ~ /Parsed_cropdetect/ { crop = $NF; sub(/^crop=/, "", crop) };
 		      END { print crop }')"
     RETVAL=$?
 
