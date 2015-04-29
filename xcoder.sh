@@ -113,6 +113,17 @@ if [ "$(stat -c %U "$PIDDIR")" != "$USER" -o \
 	exit 1 # PIDDIR ownership setup failed
 fi
 
+# SNAPDIR setup
+if [ ! -d "$SNAPDIR" ]; then
+    mkdir "$SNAPDIR" || \
+	exit 1 # SNAPDIR creation failed
+fi
+if [ "$(stat -c %U "$SNAPDIR")" != "$USER" -o \
+    "$(stat -c %G "$SNAPDIR")" != "$GROUP" ]; then
+    chown "${USER}:${GROUP}" "$SNAPDIR" || \
+	exit 1 # SNAPDIR ownership setup failed
+fi
+
 # config parsing
 if [ -r "$CONFIGFILE" ]; then
     # temp reduce verbosity
