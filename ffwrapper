@@ -286,7 +286,13 @@ if [ ${#ffabg[@]} -ge 1 ]; then
 	do_usage
 	exit 1
     fi
-    ffabg_what+=(-map "${ffmap_audio}" pipe:4)
+    # need to split audio if using pan filter
+    if [ -n "$fffilter_audio" -a ${#ffaudiosrc[@]} -eq 2 ]; then
+	fffilter_audio="${fffilter_audio%\[pa\]},asplit=2[pa][pa2]"
+	ffabg_what+=(-map "[pa2]" pipe:4)
+    else
+	ffabg_what+=(-map "${ffmap_audio}" pipe:4)
+    fi
 fi
 if [ ${#ffabg[@]} -eq 2 ]; then
     ffabg_port="${ffabg[1]}"
