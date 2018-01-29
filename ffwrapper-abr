@@ -226,6 +226,16 @@ vlcpidpath="${ffpidfile%/*}"
 vlcpidfile="${ffpidfile##*/}"
 vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile#ffmpeg.}"
 
+if [[ "$ffinput" == *srt://* ]]; then
+    STRANSMIT=$(which stransmit)
+    if [ ! -x "$STRANSMIT" ]; then
+        exit 1
+    fi
+    SRTOPTS=($ffinput "file://con")
+    exec {srtfifo}< <( "$STRANSMIT" "${SRTOPTS[@]}" )
+    ffinput="pipe:${srtfifo}"
+fi
+
 OLDIFS="$IFS"
 IFS=:
 ffvideosrc=(${opts[videosrc]})
