@@ -226,13 +226,31 @@ vlcpidpath="${ffpidfile%/*}"
 vlcpidfile="${ffpidfile##*/}"
 vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile#ffmpeg.}"
 
-if [[ "$ffinput" == *srt://* ]]; then
+if [[ "$ffinput" == *srt?(+http?(s))://* ]]; then
     STRANSMIT=$(which stransmit)
     if [ ! -x "$STRANSMIT" ]; then
         exit 1
     fi
-    SRTOPTS=($ffinput "file://con")
-    exec {srtfifo}< <( "$STRANSMIT" "${SRTOPTS[@]}" )
+    SRTOPTS=()
+    if [[ "$ffinput" == *srt+http?(s)://* ]]; then
+	ffinput=($ffinput)
+	for ((p=0; $p < ${#ffinput[@]}; p++)); do
+	    if [[ "${ffinput[$p]}" == srt+http?(s)://* ]]; then
+		ffinput[$p]="${ffinput[$p]#srt+}"
+		break
+	    else
+		SRTOPTS+=("${ffinput[$p]}")
+		unset "ffinput[${p}]"
+	    fi
+	done
+	ffinput=$(curl -s "${ffinput[@]}")
+	if [ $? -ne 0 -o -z "$ffinput" ] || \
+	    [[ "$ffinput" != srt://* ]]; then
+	    exit 1
+	fi
+    fi
+    SRTOPTS+=($ffinput "file://con")
+    exec {srtfifo}< <("$STRANSMIT" -a:no "${SRTOPTS[@]}")
     ffinput="pipe:${srtfifo}"
 fi
 
