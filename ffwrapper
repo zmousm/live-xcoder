@@ -228,7 +228,7 @@ vlcpidfile="${ffpidfile##*/}"
 vlcpidfile="${vlcpidpath}/vlc.${vlcpidfile#ffmpeg.}"
 
 if [[ "$ffinput" == *srt?(+http?(s))://* ]]; then
-    STRANSMIT=$(which stransmit)
+    STRANSMIT=$(which srt-live-transmit)
     if [ ! -x "$STRANSMIT" ]; then
         exit 1
     fi
