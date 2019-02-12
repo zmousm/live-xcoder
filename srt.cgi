@@ -136,7 +136,7 @@ def build_srt_cmdline(input, output):
     cmdline = [stransmit, '-q', '-a:no', input, output]
     if output.find('mode=rendezvous') == -1:
         timeout = '-t:{}'.format(TIMEOUT)
-        cmdline[-2:-2] = [timeout, '-taoc:yes']
+        cmdline[-2:-2] = [timeout, '-taoc']
     return cmdline
 
 def spawn_srt(*args):
