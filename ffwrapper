@@ -251,7 +251,16 @@ if [[ "$ffinput" == *srt?(+http?(s))://* ]]; then
 	fi
     fi
     SRTOPTS+=($ffinput "file://con")
-    exec {srtfifo}< <("$STRANSMIT" -a:no "${SRTOPTS[@]}")
+    if [ -n "${ffsyslog}" -o "$daemonize" = true ]; then
+	exec {srtfifo}< <(SRTPPID=$BASHPID;
+	    "$STRANSMIT" -a:no "${SRTOPTS[@]}" \
+	    2> >(SRTPID=$(pgrep -f -P "$SRTPPID" "$STRANSMIT");
+		STRANSMIT=$(basename "$STRANSMIT");
+		/usr/bin/logger -p "${ffsyslog:-daemon.notice}" \
+		    -t "${STRANSMIT}[${SRTPID}]") )
+    else
+	exec {srtfifo}< <("$STRANSMIT" -a:no "${SRTOPTS[@]}")
+    fi
     ffinput="pipe:${srtfifo}"
 fi
 
