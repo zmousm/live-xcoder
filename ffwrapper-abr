@@ -234,7 +234,7 @@ if [[ "$ffinput" == *srt?(+http?(s))://* ]]; then
     SRTOPTS=()
     if [[ "$ffinput" == *srt+http?(s)://* ]]; then
 	ffinput=($ffinput)
-	for ((p=0; $p < ${#ffinput[@]}; p++)); do
+	for ((p=0, plen=${#ffinput[@]}; $p < $plen; p++)); do
 	    if [[ "${ffinput[$p]}" == srt+http?(s)://* ]]; then
 		ffinput[$p]="${ffinput[$p]#srt+}"
 		break
