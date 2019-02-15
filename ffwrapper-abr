@@ -306,6 +306,9 @@ if [ "${#RENDITIONS[@]}" -eq 0 ]; then
     exit 1
 fi
 FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}")
+if [[ "$ffinput" == pipe:* ]]; then
+    unset "FFOPTS[3]"
+fi
 for rendition in "${RENDITIONS[@]}"; do
     fffilter_video_deint="${FFDEINTERLACE[$rendition]}${FFDEINTERLACE[$rendition]:+,}"
     fffilter_video="${opts[crop]:+crop=}${opts[crop]}${opts[crop]:+,}"
