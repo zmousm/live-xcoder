@@ -306,7 +306,7 @@ if [ "${#RENDITIONS[@]}" -eq 0 ]; then
     exit 1
 fi
 FFOPTS=(-nostats -nostdin -y -re -i "${ffinput}")
-if [[ "$ffinput" == pipe:* ]]; then
+if [[ "$ffinput" != file:* ]]; then
     unset "FFOPTS[3]"
 fi
 for rendition in "${RENDITIONS[@]}"; do
