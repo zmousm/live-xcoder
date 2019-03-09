@@ -69,8 +69,9 @@ def get_address(of_client=False, *candidate_addresses):
         if check_address(address, is_unspecified=False, is_loopback=False):
             return address
 
-    http_error(
-        error='no suitable {} address found'.format(
+    http_resp(
+        500,
+        body='no suitable {} address found'.format(
             'client' if of_client else 'server'
         )
     )
@@ -158,17 +159,40 @@ def http_error(code = 500, **kwargs):
         print(kwargs['error'])
     sys.exit()
 
+def http_resp(code = 200, **kwargs):
+    resp = """Status: {}
+""".format(str(code))
+    headers = dict()
+    if code < 500:
+        headers.update({
+            'pragma': 'no-cache',
+            'cache-control': 'no-cache, must-revalidate',
+        })
+    if kwargs.get('body'):
+        headers['content-type'] = 'text/plain'
+        # headers['content-length'] = len(kwargs.get('body'))
+    headers.update(kwargs.get('headers', {}))
+    for header in headers:
+        resp += """{}: {}
+""".format(header.title(), headers[header])
+    if 'body' in kwargs:
+        resp += """
+{}""".format(kwargs['body'])
+    print(resp)
+    sys.exit()
+
 if __name__ == '__main__':
     http_test_cgi()
-    if os.environ.get('REQUEST_METHOD', '') != 'POST':
-        http_error(405, error='Method not allowed')
+    if os.environ.get('REQUEST_METHOD', '') not in ('GET', 'POST'):
+        http_resp(405, body='Method not allowed')
+    redirect = os.environ.get('SCRIPT_NAME', '').find('redirect') != -1
     try:
         form = cgi.FieldStorage()
     except Exception as e:
-        http_error(error=e)
+        http_resp(500, body=e)
     input = INPUTS.get(form.getfirst('input', ''))
     if not input:
-        http_error(404, error='Input not found')
+        http_resp(404, body='Input not found')
     srto = {
         opt: opt in form for opt in ('encryption', 'rendezvous')
     }
@@ -181,12 +205,14 @@ if __name__ == '__main__':
     # sleep(1)
     # if not pid_exists(pid):
     #     http_error(error='stransmit died')
-    print(
-"""Status: 200
-Content-Type: text/plain
-Pragma: no-cache
-Cache-Control: no-cache, must-revalidate
-X-SRT-Pid: {pid}
-""".format(pid=pid)
-    )
-    print(build_srt_uri(bind_address, srt_port, for_client=True, **srto))
+    resp_headers = {
+        'x-srt-pid': pid,
+    }
+    resp_uri = build_srt_uri(bind_address, srt_port, for_client=True, **srto)
+    if redirect:
+        resp_headers.update({
+            'location': resp_uri,
+        })
+        http_resp(302, headers=resp_headers)
+    else:
+        http_resp(200, headers=resp_headers, body=resp_uri)
